@@ -3,7 +3,7 @@ import { updateSession } from "@/lib/redis";
 import { sendTelegramMessage } from "@/lib/telegram";
 
 export async function POST(req: Request) {
-  const { transcript, sessionId } = await req.json();
+  const { transcript, sessionId, previousInsights } = await req.json();
 
   if (!transcript || transcript.trim().length === 0) {
     return new Response("No transcript provided", { status: 400 });
@@ -39,11 +39,30 @@ ${transcript}`,
           }
         }
 
-        // Persist insights to Redis and send to Telegram
+        // Persist insights to Redis
         if (sessionId && fullInsights) {
           await updateSession(sessionId, { insights: fullInsights });
         }
-        if (fullInsights) {
+
+        // Send only what's new to Telegram
+        if (fullInsights && previousInsights) {
+          // Ask Gemini for just the delta
+          const deltaResult = await geminiFlash.generateContent([
+            {
+              text: `Compare these two insight updates and output ONLY what is new or changed in the latest version. Be very brief — just the new bullet points or changes, nothing else.
+
+Previous insights:
+${previousInsights}
+
+Latest insights:
+${fullInsights}`,
+            },
+          ]);
+          const delta = deltaResult.response.text();
+          if (delta.trim()) {
+            await sendTelegramMessage(delta).catch(console.error);
+          }
+        } else if (fullInsights) {
           await sendTelegramMessage(fullInsights).catch(console.error);
         }
 
