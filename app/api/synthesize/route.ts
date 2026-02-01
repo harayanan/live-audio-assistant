@@ -1,13 +1,16 @@
 import { geminiFlash } from "@/lib/gemini";
+import { updateSession } from "@/lib/redis";
 
 export async function POST(req: Request) {
-  const { transcript } = await req.json();
+  const { transcript, sessionId } = await req.json();
 
   if (!transcript || transcript.trim().length === 0) {
     return new Response("No transcript provided", { status: 400 });
   }
 
   const encoder = new TextEncoder();
+  let fullInsights = "";
+
   const stream = new ReadableStream({
     async start(controller) {
       try {
@@ -30,11 +33,18 @@ ${transcript}`,
         for await (const chunk of result.stream) {
           const text = chunk.text();
           if (text) {
+            fullInsights += text;
             controller.enqueue(
               encoder.encode(`data: ${JSON.stringify({ text })}\n\n`)
             );
           }
         }
+
+        // Persist insights to Redis
+        if (sessionId && fullInsights) {
+          await updateSession(sessionId, { insights: fullInsights });
+        }
+
         controller.enqueue(encoder.encode("data: [DONE]\n\n"));
       } catch (e: unknown) {
         const message = e instanceof Error ? e.message : "Unknown error";

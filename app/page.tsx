@@ -1,61 +1,72 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import AudioCapture from "@/components/AudioCapture";
 import TranscriptPanel from "@/components/TranscriptPanel";
 import InsightsPanel from "@/components/InsightsPanel";
 
 export default function Home() {
+  const [sessionId, setSessionId] = useState<string | null>(null);
   const [transcript, setTranscript] = useState("");
   const [insights, setInsights] = useState("");
   const [insightsLoading, setInsightsLoading] = useState(false);
   const lastSynthLength = useRef(0);
   const synthTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const requestSynthesis = useCallback(async (fullTranscript: string) => {
-    if (fullTranscript.trim().length < 50) return;
-    setInsightsLoading(true);
-    try {
-      const res = await fetch("/api/synthesize", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ transcript: fullTranscript }),
-      });
-      if (!res.ok || !res.body) return;
+  // Create a session on mount
+  useEffect(() => {
+    fetch("/api/sessions", { method: "POST" })
+      .then((r) => r.json())
+      .then((s) => setSessionId(s.id))
+      .catch(console.error);
+  }, []);
 
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let newInsights = "";
+  const requestSynthesis = useCallback(
+    async (fullTranscript: string) => {
+      if (fullTranscript.trim().length < 50) return;
+      setInsightsLoading(true);
+      try {
+        const res = await fetch("/api/synthesize", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ transcript: fullTranscript, sessionId }),
+        });
+        if (!res.ok || !res.body) return;
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        const lines = decoder.decode(value, { stream: true }).split("\n");
-        for (const line of lines) {
-          if (line.startsWith("data: ") && line !== "data: [DONE]") {
-            try {
-              const { text } = JSON.parse(line.slice(6));
-              if (text) {
-                newInsights += text;
-                setInsights(newInsights);
-              }
-            } catch {}
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let newInsights = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          const lines = decoder.decode(value, { stream: true }).split("\n");
+          for (const line of lines) {
+            if (line.startsWith("data: ") && line !== "data: [DONE]") {
+              try {
+                const { text } = JSON.parse(line.slice(6));
+                if (text) {
+                  newInsights += text;
+                  setInsights(newInsights);
+                }
+              } catch {}
+            }
           }
         }
+      } catch (err) {
+        console.error("Synthesis error:", err);
+      } finally {
+        setInsightsLoading(false);
       }
-    } catch (err) {
-      console.error("Synthesis error:", err);
-    } finally {
-      setInsightsLoading(false);
-    }
-  }, []);
+    },
+    [sessionId]
+  );
 
   const onTranscriptChunk = useCallback(
     (text: string) => {
       setTranscript((prev) => {
         const updated = prev + text;
 
-        // Trigger synthesis when 200+ new characters have been transcribed
         if (updated.length - lastSynthLength.current > 200) {
           lastSynthLength.current = updated.length;
           if (synthTimeout.current) clearTimeout(synthTimeout.current);
@@ -75,7 +86,12 @@ export default function Home() {
       {/* Left panel: Audio controls */}
       <div className="w-48 flex-shrink-0 border-r border-gray-700 flex flex-col items-center justify-center p-4">
         <h1 className="text-xl font-bold mb-6">Audio Assistant</h1>
-        <AudioCapture onTranscriptChunk={onTranscriptChunk} />
+        <AudioCapture sessionId={sessionId} onTranscriptChunk={onTranscriptChunk} />
+        {sessionId && (
+          <p className="text-xs text-gray-600 mt-4 break-all text-center">
+            Session: {sessionId.slice(0, 8)}...
+          </p>
+        )}
       </div>
 
       {/* Right side: Transcript + Insights stacked */}

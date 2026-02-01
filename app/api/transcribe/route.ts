@@ -1,8 +1,10 @@
 import { geminiFlash } from "@/lib/gemini";
+import { getSession, updateSession } from "@/lib/redis";
 
 export async function POST(req: Request) {
   const formData = await req.formData();
   const audioFile = formData.get("audio") as File;
+  const sessionId = formData.get("sessionId") as string | null;
 
   if (!audioFile) {
     return new Response("No audio file provided", { status: 400 });
@@ -13,6 +15,8 @@ export async function POST(req: Request) {
   const mimeType = audioFile.type || "audio/webm";
 
   const encoder = new TextEncoder();
+  let chunkText = "";
+
   const stream = new ReadableStream({
     async start(controller) {
       try {
@@ -31,11 +35,23 @@ export async function POST(req: Request) {
         for await (const chunk of result.stream) {
           const text = chunk.text();
           if (text) {
+            chunkText += text;
             controller.enqueue(
               encoder.encode(`data: ${JSON.stringify({ text })}\n\n`)
             );
           }
         }
+
+        // Persist transcript to Redis
+        if (sessionId && chunkText) {
+          const session = await getSession(sessionId);
+          if (session) {
+            await updateSession(sessionId, {
+              transcript: session.transcript + chunkText,
+            });
+          }
+        }
+
         controller.enqueue(encoder.encode("data: [DONE]\n\n"));
       } catch (e: unknown) {
         const message = e instanceof Error ? e.message : "Unknown error";

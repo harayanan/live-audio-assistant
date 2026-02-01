@@ -3,10 +3,11 @@
 import { useRef, useState, useCallback } from "react";
 
 interface Props {
+  sessionId: string | null;
   onTranscriptChunk: (text: string) => void;
 }
 
-export default function AudioCapture({ onTranscriptChunk }: Props) {
+export default function AudioCapture({ sessionId, onTranscriptChunk }: Props) {
   const [recording, setRecording] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -15,6 +16,7 @@ export default function AudioCapture({ onTranscriptChunk }: Props) {
     async (blob: Blob) => {
       const formData = new FormData();
       formData.append("audio", blob, "audio.webm");
+      if (sessionId) formData.append("sessionId", sessionId);
 
       try {
         const res = await fetch("/api/transcribe", {
@@ -44,7 +46,7 @@ export default function AudioCapture({ onTranscriptChunk }: Props) {
         console.error("Transcription error:", err);
       }
     },
-    [onTranscriptChunk]
+    [sessionId, onTranscriptChunk]
   );
 
   const start = useCallback(async () => {
@@ -52,7 +54,6 @@ export default function AudioCapture({ onTranscriptChunk }: Props) {
     const mr = new MediaRecorder(stream, { mimeType: "audio/webm;codecs=opus" });
     mediaRecorderRef.current = mr;
 
-    // Collect chunks and send every 5 seconds
     let chunks: Blob[] = [];
     mr.ondataavailable = (e) => {
       if (e.data.size > 0) chunks.push(e.data);
@@ -71,7 +72,6 @@ export default function AudioCapture({ onTranscriptChunk }: Props) {
     intervalRef.current = setInterval(() => {
       if (mr.state === "recording") {
         mr.stop();
-        // Restart after a short delay to let onstop fire
         setTimeout(() => {
           if (mediaRecorderRef.current) {
             mr.start();
