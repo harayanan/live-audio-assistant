@@ -1,5 +1,6 @@
 import { geminiFlash } from "@/lib/gemini";
 import { updateSession } from "@/lib/redis";
+import { sendTelegramMessage } from "@/lib/telegram";
 
 export async function POST(req: Request) {
   const { transcript, sessionId } = await req.json();
@@ -40,9 +41,12 @@ ${transcript}`,
           }
         }
 
-        // Persist insights to Redis
+        // Persist insights to Redis and send to Telegram
         if (sessionId && fullInsights) {
           await updateSession(sessionId, { insights: fullInsights });
+        }
+        if (fullInsights) {
+          await sendTelegramMessage(fullInsights).catch(console.error);
         }
 
         controller.enqueue(encoder.encode("data: [DONE]\n\n"));
