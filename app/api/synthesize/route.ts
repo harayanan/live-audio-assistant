@@ -3,7 +3,7 @@ import { updateSession } from "@/lib/redis";
 import { sendTelegramMessage } from "@/lib/telegram";
 
 export async function POST(req: Request) {
-  const { transcript, sessionId, previousInsights } = await req.json();
+  const { transcript, sessionId, previousTranscript } = await req.json();
 
   if (!transcript || transcript.trim().length === 0) {
     return new Response("No transcript provided", { status: 400 });
@@ -12,17 +12,18 @@ export async function POST(req: Request) {
   const encoder = new TextEncoder();
   let fullInsights = "";
 
+  // Get only the new portion of the transcript for Telegram
+  const newTranscript = previousTranscript
+    ? transcript.slice(previousTranscript.length)
+    : transcript;
+
   const stream = new ReadableStream({
     async start(controller) {
       try {
+        // Full insights for the UI panel
         const result = await geminiFlash.generateContentStream([
           {
-            text: `You are an insightful assistant. Given the following transcript of a conversation or speech, provide:
-
-1. **Key Updates** — what's new or changed since the conversation started
-2. **Key Points** — the most important ideas, facts, or decisions mentioned
-
-Be concise and use bullet points. If the transcript is short, keep your output proportionally brief.
+            text: `You are an insightful assistant. Given the following transcript of a live conversation or speech, extract the key insights — the most important, interesting, or surprising points being discussed. Output concise bullet points only. No headers, no sections, no labels.
 
 Transcript:
 ${transcript}`,
@@ -44,26 +45,20 @@ ${transcript}`,
           await updateSession(sessionId, { insights: fullInsights });
         }
 
-        // Send only what's new to Telegram
-        if (fullInsights && previousInsights) {
-          // Ask Gemini for just the delta
-          const deltaResult = await geminiFlash.generateContent([
+        // Telegram: generate a short ticker-style update from only the NEW transcript
+        if (newTranscript.trim().length > 20) {
+          const tickerResult = await geminiFlash.generateContent([
             {
-              text: `Compare these two insight updates and output ONLY what is new or changed in the latest version. Be very brief — just the new bullet points or changes, nothing else.
+              text: `You are a live insights ticker bot. Given this new segment of a live conversation, output 1-3 short, punchy insight bullet points capturing only what's noteworthy in this segment. No headers, no labels, no preamble. If nothing noteworthy, output nothing.
 
-Previous insights:
-${previousInsights}
-
-Latest insights:
-${fullInsights}`,
+New segment:
+${newTranscript}`,
             },
           ]);
-          const delta = deltaResult.response.text();
-          if (delta.trim()) {
-            await sendTelegramMessage(delta).catch(console.error);
+          const ticker = tickerResult.response.text().trim();
+          if (ticker) {
+            await sendTelegramMessage(ticker).catch(console.error);
           }
-        } else if (fullInsights) {
-          await sendTelegramMessage(fullInsights).catch(console.error);
         }
 
         controller.enqueue(encoder.encode("data: [DONE]\n\n"));

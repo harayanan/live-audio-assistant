@@ -12,7 +12,7 @@ export default function Home() {
   const [insightsLoading, setInsightsLoading] = useState(false);
   const lastSynthLength = useRef(0);
   const synthTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const previousInsightsRef = useRef("");
+  const previousTranscriptRef = useRef("");
 
   // Create a session on mount
   useEffect(() => {
@@ -30,7 +30,7 @@ export default function Home() {
         const res = await fetch("/api/synthesize", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ transcript: fullTranscript, sessionId, previousInsights: previousInsightsRef.current }),
+          body: JSON.stringify({ transcript: fullTranscript, sessionId, previousTranscript: previousTranscriptRef.current }),
         });
         if (!res.ok || !res.body) return;
 
@@ -54,7 +54,7 @@ export default function Home() {
             }
           }
         }
-        previousInsightsRef.current = newInsights;
+        previousTranscriptRef.current = fullTranscript;
       } catch (err) {
         console.error("Synthesis error:", err);
       } finally {
