@@ -19,10 +19,8 @@ export async function POST(req: Request) {
           {
             text: `You are an insightful assistant. Given the following transcript of a conversation or speech, provide:
 
-1. **Key Points** — the most important ideas mentioned
-2. **Summary** — a concise summary of what was discussed
-3. **Action Items** — any tasks or next steps mentioned
-4. **Open Questions** — any unresolved questions or topics worth exploring
+1. **Key Updates** — what's new or changed since the conversation started
+2. **Key Points** — the most important ideas, facts, or decisions mentioned
 
 Be concise and use bullet points. If the transcript is short, keep your output proportionally brief.
 

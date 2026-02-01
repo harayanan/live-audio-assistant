@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Audio Assistant",
+  title: "Live Audio Assistant",
   description: "Real-time audio transcription and insights",
 };
 

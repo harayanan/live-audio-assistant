@@ -85,7 +85,7 @@ export default function Home() {
     <main className="h-screen flex">
       {/* Left panel: Audio controls */}
       <div className="w-48 flex-shrink-0 border-r border-gray-700 flex flex-col items-center justify-center p-4">
-        <h1 className="text-xl font-bold mb-6">Audio Assistant</h1>
+        <h1 className="text-xl font-bold mb-6">Live Audio Assistant</h1>
         <AudioCapture sessionId={sessionId} onTranscriptChunk={onTranscriptChunk} />
         {sessionId && (
           <p className="text-xs text-gray-600 mt-4 break-all text-center">
